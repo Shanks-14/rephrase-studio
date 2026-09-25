@@ -1,0 +1,208 @@
+{
+  "project_title": "VerbaHumanize AI & De-Plagiarism Studio",
+  "app_type": "hybrid_fullstack",
+  "design_archetype": "Editorial Tech / Modern Swiss Serif Hybrid",
+  "font_family": {
+    "primary": "'EB Garamond', serif",
+    "mono": "'JetBrains Mono', monospace",
+    "google_font_import": "@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=JetBrains+Mono:wght@400;500;600&display=swap');"
+  },
+  "theme_strategy": {
+    "default": "system",
+    "supported": ["light", "dark", "system"],
+    "light_mode": {
+      "background": "#FBF9F5",
+      "surface": "#FFFFFF",
+      "surface_elevated": "#F4F0E8",
+      "border": "#E5DEC9",
+      "foreground": "#1A1917",
+      "muted": "#6E6A63",
+      "primary": "#1E3A2B",
+      "primary_hover": "#14281E",
+      "accent_emerald": "#10B981",
+      "accent_amber": "#F59E0B",
+      "accent_rose": "#F43F5E",
+      "highlight_changed_bg": "rgba(251, 191, 36, 0.25)",
+      "highlight_changed_border": "#F59E0B",
+      "highlight_changed_text": "#92400E"
+    },
+    "dark_mode": {
+      "background": "#0F1210",
+      "surface": "#161B18",
+      "surface_elevated": "#1E2420",
+      "border": "#2D3730",
+      "foreground": "#F2F5F3",
+      "muted": "#9CA3A0",
+      "primary": "#34D399",
+      "primary_hover": "#10B981",
+      "accent_emerald": "#34D399",
+      "accent_amber": "#FBBF24",
+      "accent_rose": "#FB7185",
+      "highlight_changed_bg": "rgba(52, 211, 153, 0.18)",
+      "highlight_changed_border": "#34D399",
+      "highlight_changed_text": "#A7F3D0"
+    }
+  },
+  "typography": {
+    "font_family": "'EB Garamond', serif",
+    "hero_h1": "text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-none",
+    "section_h2": "text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight",
+    "block_header": "text-xl sm:text-2xl font-semibold tracking-normal",
+    "editor_text": "text-lg sm:text-xl leading-relaxed font-normal font-serif",
+    "label": "text-xs font-mono uppercase tracking-widest text-muted-foreground",
+    "badge": "text-xs font-mono px-2.5 py-1 rounded-full font-medium"
+  },
+  "layout_structure": {
+    "navigation_bar": {
+      "position": "sticky top-0 z-40 backdrop-blur-xl border-b",
+      "elements": ["Brand Logo ('VerbaHumanize')", "Mode Quick Selector", "Guest/User Status", "Theme Toggle", "Auth Modal Trigger (Login/Register)", "Saved History Drawer Trigger"]
+    },
+    "main_grid": {
+      "container": "w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start",
+      "left_sidebar": "lg:col-span-3 space-y-6 flex flex-col h-full",
+      "center_block": "lg:col-span-9"
+    },
+    "center_curved_square_block": {
+      "classes": "w-full bg-surface border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
+      "header": {
+        "classes": "px-6 py-4 border-b border-border bg-surface_elevated flex flex-wrap items-center justify-between gap-4",
+        "left_controls": "flex items-center gap-3 flex-wrap",
+        "right_dropdown": "Rephrase Mode Selector (Synonym Shift, Antonym Inversion, Rhymed Flow, Syllable Flip, Academic Humanizer, Conversational AI Bypass)"
+      },
+      "body_split_pane": {
+        "classes": "grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border min-h-[420px]",
+        "left_input": "p-6 flex flex-col justify-between bg-surface relative",
+        "right_output": "p-6 flex flex-col justify-between bg-surface/50 relative overflow-y-auto"
+      },
+      "footer": {
+        "classes": "px-6 py-4 border-t border-border bg-surface_elevated flex flex-wrap items-center justify-between gap-4",
+        "left_stats": "flex items-center gap-4 text-sm font-mono text-muted",
+        "right_actions": "flex items-center gap-3"
+      }
+    },
+    "left_sidebar_components": {
+      "parts_of_speech_menu": {
+        "title": "Parts of Speech Breakdown",
+        "categories": [
+          {"id": "nouns", "label": "Nouns", "color": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"},
+          {"id": "verbs", "label": "Verbs", "color": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"},
+          {"id": "adjectives", "label": "Adjectives", "color": "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"},
+          {"id": "adverbs", "label": "Adverbs", "color": "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"},
+          {"id": "prepositions", "label": "Prepositions", "color": "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30"}
+        ]
+      },
+      "bottom_circular_scorecards": {
+        "title": "Document Verification Score",
+        "plagiarism_gauge": "Circular SVG progress ring with animated stroke and percentage counter",
+        "ai_detector_gauge": "Circular SVG progress ring with colored risk index (Human vs AI)"
+      }
+    }
+  },
+  "interactive_word_replacement_modal": {
+    "type": "Centered Popup Modal / Backdrop Blur Dialog",
+    "trigger": "User clicks any highlighted word in the rephrased output pane",
+    "features": [
+      "Displays target word original context vs current replacement",
+      "Grid of alternative synonym/antonym/rhyme options with confidence scores",
+      "Custom manual replacement input field",
+      "One-click 'Apply Replacement' and 'Revert to Original'",
+      "Acoustic/Syllable breakdown tag for selected word"
+    ],
+    "modal_style": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-in fade-in zoom-in-95"
+  },
+  "key_components": [
+    {
+      "name": "Header & Top Bar",
+      "description": "Sticky top bar with branding, usage quota badge (e.g., '1,250 words remaining for Guest'), Theme switcher, Saved history drawer button, and Auth button (Login/Signup modal)."
+    },
+    {
+      "name": "Center Curved Square Rephrase Workspace",
+      "description": "Large rounded-3xl container housing header (mode dropdown), split pane (input textarea vs highlighted output pane), and footer (word count comparison & AI / Plagiarism check action buttons)."
+    },
+    {
+      "name": "Parts-of-Speech Left Menu",
+      "description": "Real-time analyzer extracting Nouns, Verbs, Adjectives, Adverbs, Prepositions from user input with item counts, click-to-highlight filter badges."
+    },
+    {
+      "name": "Circular Score Card Widget",
+      "description": "Dual radial ring gauges at the bottom of the left sidebar rendering real-time Plagiarism % score and AI Detection % risk index with color status (Safe / Medium / High)."
+    },
+    {
+      "name": "Word Replacement Modal",
+      "description": "Pop-up overlay centered on screen triggered when clicking highlighted changes in the output pane, letting users select alternate synonyms or custom terms."
+    },
+    {
+      "name": "AI & Plagiarism Detailed Report Dialog",
+      "description": "Full overlay modal showing line-by-line sentence risk breakdown, source matching, and AI confidence heatmaps when user clicks 'Check AI Level' or 'Check Plagiarism Level'."
+    },
+    {
+      "name": "History & Presets Drawer",
+      "description": "Slide-over drawer for past rephrased documents, sample templates (Academic Essay, Marketing Pitch, Story Paragraph, Resume Summary), and export options (DOCX, PDF, Copy)."
+    }
+  ],
+  "image_urls": {
+    "avatar_user": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80",
+    "editor_bg_texture": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
+    "hero_illustration": "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1200&q=80"
+  },
+  "testing_requirements": {
+    "mandatory_data_testid": true,
+    "testid_convention": "kebab-case role-based attributes",
+    "key_testids": [
+      "navbar-brand-logo",
+      "navbar-theme-toggle",
+      "navbar-auth-button",
+      "navbar-history-button",
+      "rephrase-mode-dropdown",
+      "input-text-area",
+      "input-paste-button",
+      "input-clear-button",
+      "input-sample-button",
+      "rephrase-action-button",
+      "output-text-container",
+      "highlighted-word-item",
+      "word-replacement-modal",
+      "modal-synonym-option",
+      "modal-apply-button",
+      "modal-close-button",
+      "footer-input-word-count",
+      "footer-output-word-count",
+      "check-ai-level-button",
+      "check-plagiarism-level-button",
+      "pos-noun-badge",
+      "pos-verb-badge",
+      "pos-adj-badge",
+      "pos-adv-badge",
+      "circular-plagiarism-scorecard",
+      "circular-ai-scorecard",
+      "report-modal-close"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Always set body font-family to 'EB Garamond', serif across light and dark themes.",
+    "Ensure dark mode is fully functional using Tailwind 'dark' class on document root with smooth transitions.",
+    "Implement the center container as a big curved edges square block (rounded-3xl or rounded-2xl) with clean split-pane grid.",
+    "Header of the center block MUST have a dropdown on the right for rephrase modes: Synonym, Antonym, Rhyme, Syllable Flipped, Academic, Conversational.",
+    "Footer of the center block MUST show input word count vs output word count on the left, and 2 distinct action buttons on the right: 'Check AI Level' and 'Check Plagiarism Level'.",
+    "Right output pane MUST render rephrased text with clickable highlighted spans (badge/pill style with amber/emerald glow).",
+    "Clicking any highlighted word MUST open a centered pop-up modal with synonym replacement options and an 'Apply' button.",
+    "Left menu section MUST parse user input text and present a parts-of-speech breakdown (Nouns, Verbs, Adjectives, Adverbs, Prepositions).",
+    "Bottom of the left menu MUST feature dual circular scorecards (Plagiarism % and AI Detector %) with animated SVG rings.",
+    "Provide rich interactive state (sample text button, paste, copy, clear, toast alerts via sonner, auth state modal).",
+    "Ensure ALL interactive elements include explicit data-testid attributes."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons. Use Lucide or Phosphor React icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "All interactive and key informational elements MUST include a data-testid attribute to facilitate robust automated testing."
+  ]
+}

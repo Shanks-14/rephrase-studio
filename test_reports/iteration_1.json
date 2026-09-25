@@ -1,0 +1,30 @@
+{
+  "summary": "First-finish smoke test for VerbaHumanize MVP. Backend: all 11 endpoint checks passed (root, register/login/me/logout, POS analyze, rephrase short/guest-cap/authed 400w, alternatives, detect auth-gated). Frontend: homepage loads, all required data-testid elements present, mode dropdown lists 6 modes, sample->POS updates, rephrase renders output with 6 highlighted words, word-replacement modal opens with synonyms and Apply closes modal, guest AI-check surfaces 'Please sign in' toast.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "GET /api/ returns {message, llm:false}",
+    "POST /api/auth/register returns id/email/name/token",
+    "POST /api/auth/login valid returns 200+token; invalid returns 401",
+    "GET /api/auth/me with Bearer returns user",
+    "POST /api/auth/logout returns {ok:true}",
+    "POST /api/analyze/pos returns pos buckets + word_count",
+    "POST /api/rephrase (5-word synonym) returns output/changes/counts/mode/llm_used=false",
+    "POST /api/rephrase 400w guest -> 403 with guest limit message",
+    "POST /api/rephrase 400w authed -> 200 with correct word counts",
+    "POST /api/rephrase/alternatives returns array",
+    "POST /api/detect without auth -> 403; with auth returns ai_score/plagiarism_score/reasoning/risk_sentences",
+    "Frontend loads with navbar, sidebar, center block, footer",
+    "All required data-testid attributes present (13/13 spot-checked)",
+    "Mode dropdown lists all 6 modes (synonym/antonym/rhyme/syllable/academic/conversational)",
+    "Sample button populates input; footer input count updates to 31 words",
+    "Rephrase action returns output, footer shows Output: 31 words, 6 highlighted words rendered",
+    "Highlighted word click opens word-replacement-modal with 4 synonym options; Apply closes modal",
+    "Guest Check AI Level triggers 'Please sign in to run AI & plagiarism checks.' toast"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Theme toggle click did not add a class to document.documentElement in one cycle (system->light may just remove dark class). Not a blocker; toggle button functions and does not error. LLM disabled as expected (llm_used=false everywhere); fallback synonym bank works."
+}
