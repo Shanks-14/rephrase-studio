@@ -21,6 +21,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, BeforeValidator, EmailStr, Field, ConfigDict
 
+# NLP resources are optional at import time: if a package is missing, the
+# server must still boot (and fall back to the built-in word bank) rather
+# than crash and take every endpoint down with it.
+try:
+    import nltk
+    from nltk.corpus import wordnet as wn
+except ImportError:  # pragma: no cover
+    nltk = None
+    wn = None
+try:
+    import pronouncing
+except ImportError:  # pragma: no cover
+    pronouncing = None
+
 # ---------------- MongoDB ----------------
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -268,6 +282,271 @@ FALLBACK_SYNONYMS = {
 }
 
 
+# ---------------- WordNet (synonym / antonym source of truth) ----------------
+# WordNet is used for "synonym" and "antonym" modes always, even when an LLM
+# key is configured — it's free, deterministic, and WordNet's lemma/antonym
+# relations are exactly what those two modes need. The LLM is reserved for
+# the modes that aren't lexical-database problems (rhyme, syllable-flip,
+# academic, conversational).
+_WORDNET_READY = False
+
+# Literal WordNet POS tags (n/v/a/r). Do NOT use wn.NOUN etc. here: reading
+# them at import time forces the corpus to load and crashes the server on a
+# machine that hasn't downloaded it yet.
+_POS_TO_WORDNET = {
+    "nouns": "n",
+    "verbs": "v",
+    "adjectives": "a",
+    "adverbs": "r",
+}
+
+
+def ensure_wordnet() -> bool:
+    """Make sure the NLTK WordNet corpus is downloaded and loadable.
+
+    Self-healing: tries a cheap lookup first: if the corpus is already
+    present (or was already confirmed this process), this is a no-op. If
+    it's missing, attempts a one-time download. On any failure (e.g. no
+    network access at this moment) it logs a warning and returns False;
+    callers fall back to the small hardcoded FALLBACK_SYNONYMS bank so a
+    missing corpus degrades the feature instead of crashing requests.
+    """
+    global _WORDNET_READY
+    if _WORDNET_READY:
+        return True
+    if nltk is None or wn is None:
+        return False
+    try:
+        wn.synsets("test")
+        _WORDNET_READY = True
+        return True
+    except LookupError:
+        try:
+            nltk.download("wordnet", quiet=True)
+            nltk.download("omw-1.4", quiet=True)
+            wn.synsets("test")
+            _WORDNET_READY = True
+            return True
+        except Exception as e:
+            logging.warning(f"WordNet corpus unavailable, using fallback word bank: {e}")
+            return False
+    except Exception as e:
+        logging.warning(f"WordNet check failed, using fallback word bank: {e}")
+        return False
+
+
+def _wordnet_pos(word: str):
+    """Map our POS heuristic onto WordNet's POS tags, or None to search all."""
+    return _POS_TO_WORDNET.get(classify_word(word))
+
+
+def _wordnet_synsets(word: str, pos) -> list:
+    """Synsets for word, preferring the guessed POS but never trusting a
+    wrong guess to hide real results: our suffix-based classify_word()
+    heuristic (built for the POS sidebar, not lexical lookup) defaults to
+    "nouns" for anything it doesn't recognize, which misclassifies plenty of
+    common adjectives ("happy", "important", "big", "fast", ...). A
+    POS-restricted search for those returns nothing even though WordNet has
+    entries, so an empty restricted result always falls back to an
+    unrestricted search rather than being treated as "no synonyms"."""
+    try:
+        if pos:
+            restricted = wn.synsets(word, pos=pos)
+            if restricted:
+                return restricted
+        return wn.synsets(word)
+    except Exception:
+        return []
+
+
+def wordnet_synonyms(word: str, limit: int = 8) -> List[str]:
+    if not ensure_wordnet():
+        return []
+    pos = _wordnet_pos(word)
+    key = word.lower()
+    seen = {key}
+    results = []
+    synsets = _wordnet_synsets(word, pos)
+    for syn in synsets:
+        for lemma in syn.lemmas():
+            name = lemma.name().replace("_", " ")
+            lname = name.lower()
+            if lname in seen:
+                continue
+            seen.add(lname)
+            results.append(name)
+            if len(results) >= limit:
+                return results
+    return results
+
+
+def wordnet_antonyms(word: str, limit: int = 8) -> List[str]:
+    if not ensure_wordnet():
+        return []
+    pos = _wordnet_pos(word)
+    key = word.lower()
+    seen = {key}
+    results = []
+    synsets = _wordnet_synsets(word, pos)
+
+    def collect_from(lemma_name: str, syns) -> None:
+        for syn in syns:
+            for lemma in syn.lemmas():
+                if lemma.name().lower() != lemma_name:
+                    continue
+                for ant in lemma.antonyms():
+                    name = ant.name().replace("_", " ")
+                    lname = name.lower()
+                    if lname not in seen:
+                        seen.add(lname)
+                        results.append(name)
+
+    # Direct antonyms of the word itself.
+    collect_from(key, synsets)
+
+    # WordNet's direct antonym links are sparse, so when that comes up short,
+    # also check antonyms of the word's own synonyms (a synonym of "happy" is
+    # "glad"; "glad" may carry an antonym link that "happy" itself lacks).
+    if len(results) < limit:
+        for syn_word in wordnet_synonyms(word, limit=10):
+            if len(results) >= limit:
+                break
+            syn_key = syn_word.lower()
+            inner_synsets = _wordnet_synsets(syn_word, pos)
+            collect_from(syn_key, inner_synsets)
+
+    return results[:limit]
+
+
+def wordnet_alternatives(word: str, mode: str, limit: int = 8) -> List[str]:
+    if mode == "antonym":
+        return wordnet_antonyms(word, limit=limit)
+    return wordnet_synonyms(word, limit=limit)
+
+
+def wordnet_rephrase(text: str, mode: str) -> dict:
+    """Bulk rephrase for synonym/antonym modes, sourced entirely from WordNet."""
+    tokens = re.findall(r"\S+|\s+", text)
+    changes = []
+    out_tokens = []
+    idx = 0
+    for tok in tokens:
+        if tok.isspace():
+            out_tokens.append(tok)
+            continue
+        clean = re.sub(r"[^A-Za-z]", "", tok)
+        if not clean:
+            out_tokens.append(tok)
+            continue
+        prefix = re.match(r"^[^A-Za-z]*", tok).group(0)
+        suffix = re.search(r"[^A-Za-z]*$", tok).group(0)
+        lower = clean.lower()
+        category = classify_word(clean)
+        eligible = (
+            len(clean) > 3
+            and lower not in STOPWORDS
+            and category in ("nouns", "verbs", "adjectives", "adverbs")
+        )
+        alts = wordnet_alternatives(clean, mode, limit=6) if eligible else []
+        if alts and random.random() < 0.55:
+            new_word = random.choice(alts)
+            if tok[len(prefix)].isupper():
+                new_word = new_word.capitalize()
+            replaced = f"{prefix}{new_word}{suffix}"
+            changes.append({
+                "id": f"c{idx}",
+                "original": tok.strip(),
+                "replacement": new_word,
+                "alternatives": alts,
+                "position": len("".join(out_tokens)),
+            })
+            out_tokens.append(replaced)
+            idx += 1
+        else:
+            out_tokens.append(tok)
+    rebuilt = "".join(out_tokens)
+    return {"output": rebuilt, "changes": changes}
+
+
+# ---------------- Rhyme (CMU Pronouncing Dictionary via `pronouncing`) ----------------
+# Same philosophy as WordNet above: a free, deterministic, fully-offline
+# lexical resource (bundled CMU dict, no network/download needed) stands in
+# for the LLM wherever it can actually answer the question. Rhyme matching is
+# exactly that kind of lookup, so "rhyme" mode tries this first and only
+# falls back to the LLM/hardcoded bank when the dictionary has nothing for a
+# given word (proper nouns, typos, very rare words, etc.).
+def rhyme_alternatives(word: str, limit: int = 8) -> List[str]:
+    clean = re.sub(r"[^A-Za-z']", "", word).lower()
+    if not clean or pronouncing is None:
+        return []
+    try:
+        if not pronouncing.phones_for_word(clean):
+            return []
+        candidates = pronouncing.rhymes(clean)
+    except Exception as e:
+        logging.warning(f"Rhyme lookup failed for {word!r}: {e}")
+        return []
+    # The CMU dict is a pronunciation list, not a curated vocabulary — it's
+    # full of surnames and proper nouns (e.g. "deneuve", "labov", "ankeney")
+    # that happen to rhyme but read as nonsense mid-sentence. WordNet makes a
+    # reasonable "is this a real, known English word" filter, so lean on it
+    # when it's available; if the corpus isn't loaded, fall back to the
+    # unfiltered list rather than returning nothing.
+    wordnet_ready = ensure_wordnet()
+    seen = {clean}
+    results = []
+    for w in candidates:
+        lw = w.lower()
+        if lw in seen or not lw.isalpha():
+            continue
+        if wordnet_ready and not wn.synsets(lw):
+            continue
+        seen.add(lw)
+        results.append(w)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def rhyme_rephrase(text: str) -> dict:
+    """Bulk rephrase for rhyme mode, sourced from the CMU pronouncing dict."""
+    tokens = re.findall(r"\S+|\s+", text)
+    changes = []
+    out_tokens = []
+    idx = 0
+    for tok in tokens:
+        if tok.isspace():
+            out_tokens.append(tok)
+            continue
+        clean = re.sub(r"[^A-Za-z]", "", tok)
+        if not clean:
+            out_tokens.append(tok)
+            continue
+        prefix = re.match(r"^[^A-Za-z]*", tok).group(0)
+        suffix = re.search(r"[^A-Za-z]*$", tok).group(0)
+        lower = clean.lower()
+        eligible = len(clean) > 3 and lower not in STOPWORDS
+        alts = rhyme_alternatives(clean, limit=6) if eligible else []
+        if alts and random.random() < 0.55:
+            new_word = random.choice(alts)
+            if tok[len(prefix)].isupper():
+                new_word = new_word.capitalize()
+            replaced = f"{prefix}{new_word}{suffix}"
+            changes.append({
+                "id": f"c{idx}",
+                "original": tok.strip(),
+                "replacement": new_word,
+                "alternatives": alts,
+                "position": len("".join(out_tokens)),
+            })
+            out_tokens.append(replaced)
+            idx += 1
+        else:
+            out_tokens.append(tok)
+    rebuilt = "".join(out_tokens)
+    return {"output": rebuilt, "changes": changes}
+
+
 def fallback_rephrase(text: str, mode: str) -> dict:
     words = re.findall(r"\S+|\s+", text)
     changes = []
@@ -376,7 +655,15 @@ def heuristic_detect(text: str) -> dict:
 # ---------------- Routes ----------------
 @api_router.get("/")
 async def root():
-    return {"message": "VerbaHumanize API", "llm": bool(OPENAI_API_KEY)}
+    return {
+        "message": "VerbaHumanize API",
+        "llm": bool(OPENAI_API_KEY),
+        # Diagnostics: fan mode / synonym / antonym need wordnet=true, rhyme
+        # needs pronouncing=true. If wordnet is false, the corpus is missing
+        # or failed to download (see the server log for the reason).
+        "wordnet": ensure_wordnet(),
+        "pronouncing": pronouncing is not None,
+    }
 
 
 # Auth
@@ -439,23 +726,63 @@ async def rephrase(body: RephraseRequest, request: Request):
             status_code=403,
             detail=f"Guest limit is {GUEST_WORD_LIMIT} words. Please sign up to rephrase longer texts.",
         )
-    result = llm_rephrase(text, body.mode) or fallback_rephrase(text, body.mode)
+    if body.mode in ("synonym", "antonym"):
+        # Always WordNet-driven for these two modes, LLM key or not: lexical
+        # relations (synsets, antonyms) are WordNet's job, not the LLM's.
+        result = wordnet_rephrase(text, body.mode)
+        result["source"] = "wordnet"
+        result["llm_used"] = False
+    elif body.mode == "rhyme":
+        # Try the pronunciation dictionary first (free, deterministic,
+        # offline); only reach for the LLM/hardcoded bank if it couldn't
+        # find a rhyme for anything in the text.
+        result = rhyme_rephrase(text)
+        if result["changes"]:
+            result["source"] = "pronouncing"
+            result["llm_used"] = False
+        else:
+            result = llm_rephrase(text, body.mode) or fallback_rephrase(text, body.mode)
+            result["source"] = "llm" if bool(OPENAI_API_KEY) else "fallback"
+            result["llm_used"] = bool(OPENAI_API_KEY)
+    else:
+        result = llm_rephrase(text, body.mode) or fallback_rephrase(text, body.mode)
+        result["source"] = "llm" if bool(OPENAI_API_KEY) else "fallback"
+        result["llm_used"] = bool(OPENAI_API_KEY)
     result["input_word_count"] = wc
     result["output_word_count"] = word_count(result["output"])
     result["mode"] = body.mode
-    result["llm_used"] = bool(OPENAI_API_KEY)
     return result
 
 
 @api_router.post("/rephrase/alternatives")
 async def alternatives(body: WordAlternativesRequest):
+    if body.mode in ("synonym", "antonym"):
+        alts = wordnet_alternatives(body.word, body.mode)
+        if alts:
+            return {"alternatives": alts, "llm_used": False, "source": "wordnet"}
+        # WordNet has nothing (corpus unavailable, or an unknown word). The
+        # built-in bank only holds synonyms, so it's valid for synonym mode
+        # only — never serve synonyms as "antonyms".
+        fb = FALLBACK_SYNONYMS.get(body.word.lower().strip(), []) if body.mode == "synonym" else []
+        return {"alternatives": fb, "llm_used": False, "source": "fallback" if fb else "none"}
+
+    if body.mode == "rhyme":
+        alts = rhyme_alternatives(body.word)
+        if alts:
+            return {"alternatives": alts, "llm_used": False, "source": "pronouncing"}
+        # No dictionary rhyme for this word — fall through to LLM/fallback below.
+
     alts = llm_alternatives(body.word, body.mode, body.context or "")
     if alts is None:
         key = body.word.lower().strip()
         alts = FALLBACK_SYNONYMS.get(key, [])
         if not alts:
             alts = [body.word + "-alt1", body.word + "-alt2", body.word + "-alt3"]
-    return {"alternatives": alts, "llm_used": bool(OPENAI_API_KEY) and alts is not None}
+    return {
+        "alternatives": alts,
+        "llm_used": bool(OPENAI_API_KEY) and alts is not None,
+        "source": "llm" if bool(OPENAI_API_KEY) else "fallback",
+    }
 
 
 # AI detection & plagiarism
@@ -492,6 +819,7 @@ async def startup():
         await db.users.create_index("email", unique=True)
     except Exception as e:
         logger.warning(f"index error: {e}")
+    ensure_wordnet()
 
 
 @app.on_event("shutdown")
