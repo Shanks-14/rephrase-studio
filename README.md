@@ -161,7 +161,3 @@ This opens `http://localhost:3000`, talking to the backend on port 8000.
 - See `CODE_REVIEW.md` for security/config follow-ups (CORS, secret handling, auth-token storage).
 
 ---
-
-## 📄 License
-
-Add your preferred license here (MIT is a common choice for a portfolio project).
