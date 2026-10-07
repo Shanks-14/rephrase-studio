@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Fan, RotateCcw, Sparkles, Wand2, ArrowDown } from "lucide-react";
+import { RotateCcw, Sparkles, Wand2, ArrowDown, Fan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
@@ -27,12 +27,11 @@ function tokenize(text) {
   }));
 }
 
-export default function SandboxMode({ initialText = "", mode: parentMode, onPullFromStudio }) {
+export default function SandboxMode({ initialText = "", mode: parentMode, onPullFromStudio, fanActive }) {
   const [mode, setMode] = useState(parentMode || "synonym");
   const [text, setText] = useState(initialText);
   const [tokens, setTokens] = useState(() => tokenize(initialText));
   const [wordStates, setWordStates] = useState({}); // id -> { current, alternatives, index }
-  const [fanActive, setFanActive] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
   const cycleRef = useRef({ id: null, timer: null });
   const cacheRef = useRef({}); // word_lower -> alternatives[]
@@ -74,6 +73,17 @@ export default function SandboxMode({ initialText = "", mode: parentMode, onPull
       return next;
     });
   }, []);
+
+  // Fan mode is now owned by the parent (the toggle button lives in
+  // RephraseWorkspace's header). This component only ever mounts while
+  // fanActive is true, but we still guard here: if a future change keeps
+  // Sandbox mounted while fan mode flips off, any in-flight cycle stops
+  // immediately rather than lingering.
+  useEffect(() => {
+    if (!fanActive) {
+      stopCycle();
+    }
+  }, [fanActive, stopCycle]);
 
   const startCycle = useCallback(
     async (token) => {
@@ -217,8 +227,9 @@ export default function SandboxMode({ initialText = "", mode: parentMode, onPull
             <div className="text-lg font-semibold tracking-tight leading-none">
               Word Sandbox
             </div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-1">
-              Throw paint at the wall · hover with the fan
+            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-1 flex items-center gap-1.5">
+              <Fan className="w-3 h-3 animate-spin text-primary" />
+              Fan mode is on · hover a word to cycle it
             </div>
           </div>
         </div>
@@ -236,21 +247,6 @@ export default function SandboxMode({ initialText = "", mode: parentMode, onPull
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant={fanActive ? "default" : "outline"}
-            className="rounded-full gap-2"
-            data-testid="sandbox-fan-toggle"
-            onClick={() => {
-              setFanActive((v) => {
-                const next = !v;
-                if (!next) stopCycle();
-                return next;
-              });
-            }}
-          >
-            <Fan className={`w-4 h-4 ${fanActive ? "animate-spin" : ""}`} />
-            {fanActive ? "Fan on" : "Fan mode"}
-          </Button>
           <Button
             variant="ghost"
             className="rounded-full gap-2"

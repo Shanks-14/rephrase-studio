@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Sparkles, Trash2, Copy, ClipboardPaste, ScanLine, Shield, Loader2, FileText } from "lucide-react";
+import { Sparkles, Trash2, Copy, ClipboardPaste, ScanLine, Shield, Loader2, FileText, Fan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, formatApiError } from "@/lib/api";
@@ -85,7 +85,15 @@ function OutputRenderer({ output, changes, onWordClick }) {
   return <p className="whitespace-pre-wrap text-lg leading-relaxed">{parts}</p>;
 }
 
-export default function RephraseWorkspace({ onPosUpdate, onScoresUpdate, scores }) {
+export default function RephraseWorkspace({
+  onPosUpdate,
+  onScoresUpdate,
+  scores,
+  onModeChange,
+  onOutputChange,
+  fanActive,
+  onToggleFan,
+}) {
   const { user } = useAuth();
   const [mode, setMode] = useState("synonym");
   const [input, setInput] = useState("");
@@ -116,6 +124,17 @@ export default function RephraseWorkspace({ onPosUpdate, onScoresUpdate, scores 
     }, 400);
     return () => clearTimeout(t);
   }, [input, onPosUpdate]);
+
+  // Keep the parent (Home) in sync with the latest output so features like
+  // Sandbox's "Pull from Studio" have something real to pull.
+  useEffect(() => {
+    onOutputChange?.(output);
+  }, [output, onOutputChange]);
+
+  const handleModeChange = (value) => {
+    setMode(value);
+    onModeChange?.(value);
+  };
 
   const doRephrase = async () => {
     if (!input.trim()) {
@@ -207,10 +226,24 @@ export default function RephraseWorkspace({ onPosUpdate, onScoresUpdate, scores 
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant={fanActive ? "default" : "outline"}
+              className="rounded-full gap-2"
+              data-testid="sandbox-fan-toggle"
+              title={
+                fanActive
+                  ? "Turn off Fan mode to close the Word Sandbox"
+                  : "Turn on Fan mode to open the Word Sandbox"
+              }
+              onClick={() => onToggleFan?.()}
+            >
+              <Fan className={`w-4 h-4 ${fanActive ? "animate-spin" : ""}`} />
+              {fanActive ? "Fan on" : "Fan mode"}
+            </Button>
             <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground hidden sm:inline">
               Mode
             </span>
-            <Select value={mode} onValueChange={setMode}>
+            <Select value={mode} onValueChange={handleModeChange}>
               <SelectTrigger
                 data-testid="rephrase-mode-dropdown"
                 className="w-[220px] rounded-full"

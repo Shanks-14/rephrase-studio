@@ -14,6 +14,10 @@ export default function Home() {
   });
   const [scores, setScores] = useState({ ai_score: null, plagiarism_score: null });
   const [studioMode, setStudioMode] = useState("synonym");
+  // Fan mode now lives here: it's the single source of truth for both the
+  // toggle button (rendered inside RephraseWorkspace's header) and whether
+  // the Word Sandbox section is mounted at all.
+  const [fanActive, setFanActive] = useState(false);
   const studioOutputRef = useRef("");
 
   return (
@@ -54,11 +58,16 @@ export default function Home() {
               scores={scores}
               onModeChange={setStudioMode}
               onOutputChange={(t) => (studioOutputRef.current = t)}
+              fanActive={fanActive}
+              onToggleFan={() => setFanActive((v) => !v)}
             />
-            <SandboxMode
-              mode={studioMode}
-              onPullFromStudio={() => studioOutputRef.current}
-            />
+            {fanActive && (
+              <SandboxMode
+                mode={studioMode}
+                fanActive={fanActive}
+                onPullFromStudio={() => studioOutputRef.current}
+              />
+            )}
           </div>
         </div>
 
